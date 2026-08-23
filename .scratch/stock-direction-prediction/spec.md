@@ -17,6 +17,8 @@ A minimal, configurable demo that:
 5. Is delivered both as a **Jupyter notebook** (explore + verify) and a **CLI** (`python -m stocklook`, daily use).
 6. Keeps the stock pool and prediction horizon as parameters so I can swap in stocks I actually follow and choose next-day (`T+1`) or day-after (`T+2`).
 
+Beyond the LightGBM reference signal, the CLI also offers an optional **DeepSeek LLM analysis** (`--llm`): it snapshots the latest quote (Tencent `qt.gtimg.cn`, Sina `hq.sinajs.cn` fallback), packs the snapshot + last 30 trading days + today's technical indicators + the walk-forward backtest summary into a prompt, and asks the model to return a JSON verdict (direction up/down/flat, confidence, reasons, risks, summary) framed as a probabilistic reference signal, not a guarantee. The API key is read only from the `DEEPSEEK_API_KEY` environment variable (or `--api-key`) and never stored in code or git.
+
 The signal is framed as a **probabilistic reference signal with interpretable features**, not a guarantee: an individual stock's next-day direction is close to random (~50% over the long run), so realistic value comes from the probability, the feature importance, and honest backtest numbers — not from chasing high accuracy.
 
 ## User Stories
@@ -42,7 +44,7 @@ The signal is framed as a **probabilistic reference signal with interpretable fe
 
 ## Implementation Decisions
 
-- **Data source**: 腾讯行情接口 `web.ifzq.gtimg.cn/appstock/app/fqkline/get`（免费、无令牌、直连可用），支持 `qfq` 前复权，按日期范围分页拉取（每页 640 条，从 end 向 start 翻页），本地 CSV 缓存于 `.cache/`。原 akshare/eastmoney 源因反爬 IP 级封锁被替换（见 Further Notes）。
+- **Data source**: 腾讯行情接口 `web.ifzq.gtimg.cn/appstock/app/fqkline/get`（免费、无令牌、直连可用），支持 `qfq` 前复权，按日期范围分页拉取（每页 640 条，从 end 向 start 翻页），本地 CSV 缓存于 `.cache/`。原 akshare/eastmoney 源因反爬 IP 级封锁被替换（见 Further Notes）。实时快照：腾讯 `qt.gtimg.cn/q=`（88 字段，含换手/振幅/量比；短时高频会限流返回 `none_match`）优先，新浪 `hq.sinajs.cn/list=`（34 字段，缺换手/振幅/量比；需带市场前缀 `sh/sz/bj` 与 finance Referer）自动兑底。
 - **Stock pool**: configurable list, default `600519`, `000001`, `300750`, `600036`, `601318`. Easily replaced by the user with the stocks they actually follow.
 - **Prediction horizon**: a single integer parameter (`1` = next trading day, `2` = the day after). Implemented by shifting the label forward by the horizon; the default is `1`.
 - **Target variable**: binary up/down classification. Label = `1` when the `前复权` close at `today + horizon` is strictly greater than today's close, else `0`. An optional `threshold` (default `0`) treats moves within `±threshold` of the relative move as neutral and excludes them from the binary classification.
