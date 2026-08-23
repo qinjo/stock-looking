@@ -20,7 +20,6 @@ FEATURE_COLS = [
     "volume_ratio",
     "position20",
     "amplitude",
-    "turnover",
     "pct_change",
 ]
 
@@ -66,6 +65,13 @@ def add_features(df):
     out["rsi14"] = _rsi(close)
     out["macd"], out["macd_signal"], out["macd_hist"] = _macd(close)
     out["volume_ratio"] = volume / volume.rolling(5).mean()
+
+    # 上游若未提供振幅/涨跌幅（如腾讯只有 OHLCV），由 OHLCV 补算，口径与 akshare 一致
+    if "amplitude" not in out.columns:
+        prev_close = close.shift(1)
+        out["amplitude"] = (out["high"] - out["low"]) / prev_close * 100
+    if "pct_change" not in out.columns:
+        out["pct_change"] = out["ret"] * 100
 
     out["rolling_min20"] = close.rolling(20).min()
     out["rolling_max20"] = close.rolling(20).max()
