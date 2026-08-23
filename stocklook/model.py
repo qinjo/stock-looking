@@ -45,6 +45,13 @@ def walk_forward_eval(df, feature_cols, label_col, min_train=500, step=60):
     return y_true, y_pred, y_prob
 
 
+def feature_importances(df, feature_cols, label_col, n=10):
+    clean = df.dropna(subset=feature_cols + [label_col])
+    model = _train_model(clean[feature_cols], clean[label_col])
+    imp = pd.Series(model.feature_importances_, index=feature_cols)
+    return imp.sort_values(ascending=False).head(n)
+
+
 def evaluate(y_true, y_pred, y_prob):
     acc = accuracy_score(y_true, y_pred)
     cm = confusion_matrix(y_true, y_pred, labels=[0, 1])

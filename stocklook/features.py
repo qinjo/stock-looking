@@ -32,7 +32,12 @@ def _rsi(close, period=14):
     avg_gain = gain.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
     avg_loss = loss.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
     rs = avg_gain / avg_loss.replace(0.0, np.nan)
-    return 100 - (100 / (1 + rs))
+    rsi = 100 - (100 / (1 + rs))
+    eps = 1e-12
+    flat = (avg_loss.le(eps)) & (avg_gain.le(eps))
+    up_only = (avg_loss.le(eps)) & (avg_gain.gt(eps))
+    rsi = rsi.mask(flat, 50.0).mask(up_only, 100.0)
+    return rsi
 
 
 def _macd(close, fast=12, slow=26, signal=9):
@@ -71,7 +76,15 @@ def add_features(df):
     return out
 
 
-def build_label(df, horizon):
+def build_label(df, horizon, threshold=0.0):
     close = df["close"]
     future_close = close.shift(-horizon)
-    return (future_close > close).astype(int)
+    if threshold <= 0:
+        label = (future_close > close).astype(float)
+        label[future_close.isna()] = np.nan
+        return label
+    move = (future_close - close) / close
+    label = pd.Series(np.nan, index=df.index, dtype="float")
+    label[move > threshold] = 1.0
+    label[move < -threshold] = 0.0
+    return label
