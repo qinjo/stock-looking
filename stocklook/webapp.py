@@ -5,13 +5,16 @@ API：POST /api/analyze  body {"symbols": "600519,300750", "horizon": 1, "thresh
 """
 import os
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_from_directory
 
 from . import config
 from .pipeline import analyze_symbol, llm_analysis
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="static", static_url_path="/static")
+
+_STATIC_DIR = Path(__file__).parent / "static"
 
 # LLM 并发数：DeepSeek 请求是瓶颈；数据拉取有本地缓存
 MAX_WORKERS = 3
@@ -19,7 +22,27 @@ MAX_WORKERS = 3
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return _serve_frontend("index.html")
+
+
+@app.errorhandler(404)
+def _spa_fallback(_):
+    """SPA 路由回退：静态产物存在时统一回到 index.html。"""
+    return _serve_frontend("index.html")
+
+
+def _serve_frontend(path):
+    idx = _STATIC_DIR / "index.html"
+    if idx.exists():
+        return send_from_directory(_STATIC_DIR, path)
+    return (
+        "<html><body style='font-family:sans-serif;text-align:center;padding-top:80px'>"
+        "<h1>📈 A股次日方向 · 参考信号</h1>"
+        "<p>前端尚未构建：请先执行 <code>cd frontend && npm install && npm run build</code>，"
+        "或开发模式运行 <code>cd frontend && npm run dev</code>（API 代理到本服务 8000 端口）。</p>"
+        "</body></html>",
+        200,
+    )
 
 
 def _quote_to_json(quote):
