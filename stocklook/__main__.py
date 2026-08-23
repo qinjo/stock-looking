@@ -35,6 +35,13 @@ def _print_analysis(result):
     }.get(analysis.get("direction"), analysis.get("direction"))
     conf = analysis.get("confidence")
     print(f"方向: {direction}  置信度: {conf if conf is not None else '未知'}")
+    if analysis.get("bull_cases") or analysis.get("bear_cases"):
+        print("看涨证据:")
+        for c in analysis.get("bull_cases", []):
+            print(f"  ▲ {c}")
+        print("看跌证据:")
+        for c in analysis.get("bear_cases", []):
+            print(f"  ▼ {c}")
     for reason in analysis.get("reasons", []):
         print(f"  - {reason}")
     if analysis.get("risks"):

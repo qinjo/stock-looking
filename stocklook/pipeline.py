@@ -39,12 +39,15 @@ def run(stocks, horizon, threshold=0.0):
     return pd.DataFrame(results).set_index("symbol"), importances
 
 
-def llm_analysis(symbol, api_key, horizon=1, threshold=0.0, _http_post=None):
-    """单只股票的 LLM 分析：复用历史管线结果，叠加实时快照后调 DeepSeek。
+def llm_analysis(symbol, api_key, horizon=1, threshold=0.0, _http_post=None,
+                 df=None, metrics=None, importances=None):
+    """单只股票的 LLM 分析：可复用已有历史管线结果，叠加实时快照后调 DeepSeek。
 
     返回 dict：{symbol, quote, analysis(解析后 JSON), raw(原始回复)}。
+    df/metrics/importances 未传入时内部调用 analyze_symbol 计算（CLI 场景）。
     """
-    df, metrics, importances = analyze_symbol(symbol, horizon, threshold)
+    if df is None or metrics is None or importances is None:
+        df, metrics, importances = analyze_symbol(symbol, horizon, threshold)
     quote = parse_quote(fetch_quote(symbol), code=symbol)
     system, prompt = build_analysis_prompt(
         symbol, quote, df, metrics=metrics, importances=importances

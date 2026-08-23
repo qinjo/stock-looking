@@ -146,7 +146,10 @@ class TestBuildAnalysisPrompt:
         assert "1272.83" in user
         assert "direction" in user
         assert '"up|down|flat"' in user
+        assert "bull_cases" in user
         assert "RSI14 55.0" in user
+        assert "数据纪律" in system
+        assert "多空双视角" in system
         assert "参考信号而非承诺" in system
 
     def test_prompt_include_metrics_when_given(self):

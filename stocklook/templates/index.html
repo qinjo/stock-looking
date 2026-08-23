@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A股次日方向 · LLM 参考信号</title>
+<style>
+  :root { --up:#0a7d32; --down:#c62828; --flat:#757575; --bg:#f5f6f8; --card:#fff; --line:#e3e6ea; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: #222; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 28px 16px 60px; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .sub { color: #666; font-size: 13px; margin-bottom: 20px; }
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 24px; }
+  .controls input { flex: 1; min-width: 260px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; }
+  .controls button { padding: 10px 22px; background: #2563eb; color: #fff; border: 0; border-radius: 8px; font-size: 14px; cursor: pointer; }
+  .controls button:disabled { opacity: .6; cursor: wait; }
+  .bar { height: 4px; border-radius: 2px; background: #e8eaee; overflow: hidden; margin-bottom: 20px; display: none; }
+  .bar i { display: block; height: 100%; width: 0; background: #2563eb; transition: width .3s; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
+  .head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .name { font-size: 18px; font-weight: 600; }
+  .sym { color: #888; font-size: 13px; }
+  .time { color: #999; font-size: 12px; margin-left: auto; }
+  .quote { margin: 10px 0 14px; font-size: 13px; color: #444; }
+  .quote b { font-size: 17px; }
+  .badge { padding: 3px 12px; border-radius: 999px; color: #fff; font-weight: 600; font-size: 13px; }
+  .b-up { background: var(--up); } .b-down { background: var(--down); } .b-flat { background: var(--flat); }
+  .conf { font-size: 13px; color: #555; }
+  .conf meter { width: 140px; height: 10px; vertical-align: middle; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+  .case { border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.6; }
+  .bull { background: #eef8f1; border: 1px solid #cfe8d8; }
+  .bear { background: #fdf1f1; border: 1px solid #f2d6d6; }
+  .case h4 { font-size: 12px; margin-bottom: 6px; }
+  .bull h4 { color: var(--up); } .bear h4 { color: var(--down); }
+  .case ul { padding-left: 18px; }
+  .section { margin-top: 10px; font-size: 13px; line-height: 1.7; color: #333; }
+  .section h4 { font-size: 12px; color: #666; margin-bottom: 4px; }
+  .risks li { color: #8a4b08; }
+  .summary { margin-top: 10px; padding: 10px 12px; background: #f7f8fa; border-radius: 8px; font-size: 13px; }
+  .meta { margin-top: 14px; border-top: 1px dashed var(--line); padding-top: 12px; font-size: 12px; color: #777; display: flex; gap: 10px; flex-wrap: wrap; }
+  .meta table { border-collapse: collapse; }
+  .meta td, .meta th { padding: 3px 10px; border: 1px solid var(--line); }
+  .meta th { background: #fafbfc; font-weight: 500; }
+  .err { margin-top: 10px; color: var(--down); font-size: 13px; background: #fdf1f1; padding: 8px 12px; border-radius: 8px; word-break: break-all; }
+  .raw { margin-top: 10px; font-size: 12px; color: #666; white-space: pre-wrap; background: #f7f8fa; padding: 10px; border-radius: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📈 A股次日方向 · 参考信号</h1>
+  <p class="sub">实时行情快照 + LightGBM 回测 + DeepSeek 大模型分析（仅作研究参考，不构成投资建议）</p>
+  <div class="controls">
+    <input id="symbols" placeholder="输入股票代码，逗号分隔，如：600519, 300750, 000001" value="600519,300750">
+    <button id="go">开始分析</button>
+  </div>
+  <div class="bar" id="bar"><i id="barfill"></i></div>
+  <div id="results"></div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+
+async function analyze(rawSymbols) {
+  const btn = $('#go'), bar = $('#bar'), fill = $('#barfill');
+  btn.disabled = true; bar.style.display = 'block'; fill.style.width = '0%';
+  $('#results').innerHTML = '';
+  try {
+    const resp = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbols: rawSymbols }),
+    });
+    const data = await resp.json();
+    if (data.error) { $('#results').innerHTML = `<div class="card err">${data.error}</div>`; return; }
+    render(data.results, data.llm_enabled);
+  } catch (e) {
+    $('#results').innerHTML = `<div class="card err">请求失败：${e.message}</div>`;
+  } finally {
+    btn.disabled = false; bar.style.display = 'none';
+  }
+}
+
+function dirClass(d) {
+  if (d === 'up') return ['b-up', '看涨'];
+  if (d === 'down') return ['b-down', '看跌'];
+  return ['b-flat', '横盘/方向不明'];
+}
+
+function fmt(v, d = 2) { return (v === null || v === undefined || Number.isNaN(v)) ? '--' : Number(v).toFixed(d); }
+function pct(v) { return (v === null || v === undefined || Number.isNaN(v)) ? '--' : (Number(v) * 100).toFixed(1) + '%'; }
+
+function ul(arr) { return arr && arr.length ? '<ul>' + arr.map(x => `<li>${x}</li>`).join('') + '</ul>' : '<p>（无）</p>'; }
+
+function render(results, llmEnabled) {
+  const box = $('#results');
+  const cards = results.map(r => {
+    if (r.error && !r.metrics) {
+      return `<div class="card"><div class="head"><span class="name">${r.symbol}</span></div>
+              <div class="err">分析失败：${r.error}</div></div>`;
+    }
+    const q = r.quote || {};
+    const m = r.metrics || {};
+    const imp = r.importances || {};
+    const a = r.analysis;
+    let llmHtml = '';
+    if (!llmEnabled) {
+      llmHtml = `<div class="err">未配置 DEEPSEEK_API_KEY，仅显示回测指标。</div>`;
+    } else if (r.error) {
+      llmHtml = `<div class="err">${r.error}</div>`;
+    } else if (a) {
+      const [cls, zh] = dirClass(a.direction);
+      const conf = a.confidence;
+      llmHtml = `
+        <div class="head">
+          <span class="badge ${cls}">${zh}</span>
+          <span class="conf">置信度 <meter min="0" max="1" low="0.45" high="0.65" optimum="0.8" value="${conf}"></meter> ${fmt(conf)}</span>
+        </div>
+        <div class="cols">
+          <div class="case bull"><h4>▲ 看涨证据</h4>${ul(a.bull_cases)}</div>
+          <div class="case bear"><h4>▼ 看跌证据</h4>${ul(a.bear_cases)}</div>
+        </div>
+        ${a.reasons && a.reasons.length ? `<div class="section"><h4>综合判断理由</h4>${ul(a.reasons)}</div>` : ''}
+        ${a.risks && a.risks.length ? `<div class="section risks"><h4>⚠ 风险</h4>${ul(a.risks)}</div>` : ''}
+        ${a.summary ? `<div class="summary">💬 ${a.summary}</div>` : ''}`;
+    } else if (r.raw) {
+      llmHtml = `<div class="raw">${r.raw}</div>`;
+    }
+    const imps = Object.entries(imp).slice(0, 6).map(([k, v]) => `${k}: ${v}`).join('　');
+    const dirBadge = q.change_pct !== null && q.change_pct !== undefined
+      ? (q.change_pct > 0 ? '<span class="badge b-up">今涨</span>' : q.change_pct < 0 ? '<span class="badge b-down">今跌</span>' : '')
+      : '';
+    return `
+      <div class="card">
+        <div class="head">
+          <span class="name">${q.name || r.symbol}</span>
+          <span class="sym">${r.symbol}${dirBadge}</span>
+          <span class="time">${q.time ? new Date(q.time).toLocaleString('zh-CN') : ''}</span>
+        </div>
+        <div class="quote">
+          现价 <b>${fmt(q.price)}</b>
+          <span style="color:${q.change_pct < 0 ? 'var(--down)' : 'var(--up)'}"> ${fmt(q.change)} (${fmt(q.change_pct)}%)</span>
+          ｜今开 ${fmt(q.open)} ｜ 最高 ${fmt(q.high)} ｜ 最低 ${fmt(q.low)}
+          ｜ 换手 ${fmt(q.turnover)}% ｜ 量比 ${fmt(q.volume_ratio)} ｜ 振幅 ${fmt(q.amplitude)}%
+        </div>
+        ${llmHtml}
+        <div class="meta">
+          <span>回测 n=${m.n ?? '--'}</span>
+          <span>上涨基线 up_rate=${pct(m.up_rate)}</span>
+          <span>accuracy=${pct(m.accuracy)}</span>
+          <span>auc=${pct(m.auc)}</span>
+          <span>胜率=${pct(m.win_rate)}</span>
+          <span>混淆 ${[m.tn, m.fp, m.fn, m.tp].map(x => x ?? '--').join('/')}</span>
+          ${imps ? `<div>特征重要性: ${imps}</div>` : ''}
+        </div>
+      </div>`;
+  });
+  box.innerHTML = cards.join('\n');
+}
+
+$('#go').addEventListener('click', () => analyze($('#symbols').value));
+$('#symbols').addEventListener('keydown', e => { if (e.key === 'Enter') analyze($('#symbols').value); });
+</script>
+</body>
+</html>
