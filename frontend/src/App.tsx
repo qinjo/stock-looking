@@ -36,7 +36,8 @@ export default function App() {
     <div className="wrap">
       <h1>📈 A股次日方向 · 参考信号</h1>
       <p className="sub">
-        实时行情快照 + LightGBM 回测 + DeepSeek 大模型分析（仅作研究参考，不构成投资建议）
+        实时行情快照 + LightGBM 回测 + DeepSeek 大模型分析（仅作研究参考，不构成投资建议）<br />
+        ⏱ 一次分析约需 15~30 秒（含实时行情与 LLM 调用），请耐心等待
       </p>
 
       <SearchBar initial={symbols} loading={loading} onAnalyze={run} />
